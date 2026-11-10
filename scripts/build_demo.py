@@ -14,7 +14,7 @@ import numpy as np
 import shapely
 from PIL import Image
 from shapely.geometry import MultiPolygon
-from panel_assets import build_panel_assets, build_shields
+from panel_assets import build_panel_assets, build_shields, load_rgba, save_sprite
 from panel_fonts import build_panel_fonts, panel_characters
 
 
@@ -478,12 +478,67 @@ SUBJECT_LABELS = {
     'march': ('卫戍国', 'March'),
     'tributary_state': ('朝贡国', 'Tributary State'),
 }
-SUBJECT_ICONS = {
-    'appanage': ('appanage', 'appanage-overlord'),
-    'union': ('union', 'union-overlord'),
-    'march': ('march', 'march-overlord'),
-    'tributary_state': ('tribute', 'tribute-overlord'),
+SUBJECT_ICON_NAMES = {
+    'GFX_diplomacy_leadvassal': 'subject',
+    'GFX_diplomacy_amvassal': 'overlord',
+    'GFX_icon_diplomacy_lead_appanage': 'appanage',
+    'GFX_icon_diplomacy_am_appanage': 'appanage-overlord',
+    'GFX_diplomacy_leadunions': 'union',
+    'GFX_diplomacy_inunion': 'union-overlord',
+    'GFX_diplomacy_leadmarch': 'march',
+    'GFX_diplomacy_weakmarch': 'march-overlord',
+    'GFX_diplomacy_leadtributary': 'tribute',
+    'GFX_diplomacy_amtributary': 'tribute-overlord',
 }
+
+
+def build_subject_icons(roots, subtypes, panel_dir):
+    types = dict(definitions(roots, 'common/subject_types'))
+    directions = ('diplomacy_overlord_sprite', 'diplomacy_subject_sprite')
+    default = types['default']
+    default_sprites = tuple(default[field] for field in directions)
+    pairs = {}
+    for subtype in sorted(subtypes):
+        fields, seen = {}, set()
+        subject_type = 'personal_union' if subtype == 'union' else subtype
+        while subject_type in types and subject_type not in seen:
+            seen.add(subject_type)
+            definition = types[subject_type]
+            for field in directions:
+                if field in definition:
+                    fields.setdefault(field, definition[field])
+            subject_type = definition.get('copy_from')
+        pairs[subtype] = tuple(fields.get(field, default[field]) for field in directions)
+
+    wanted = set(default_sprites)
+    wanted.update(sprite for pair in pairs.values() for sprite in pair)
+    textures = {}
+    for path in layered_files(roots, 'interface', 'gfx'):
+        for key, block in entries(path):
+            if key.lower() != 'spritetypes' or not isinstance(block, list):
+                continue
+            for kind, sprite in assignments(block):
+                if kind.lower() != 'spritetype' or not isinstance(sprite, list):
+                    continue
+                data = dict(assignments(sprite))
+                name, texture = data.get('name'), data.get('texturefile')
+                if name in wanted and isinstance(texture, str):
+                    textures[name] = Path(texture)
+
+    icons = {}
+    for name, texture in textures.items():
+        # Some vanilla entries still name a TGA whose installed texture is DDS.
+        candidates = (texture, texture.with_suffix('.dds'))
+        source = next((root / candidate for root in reversed(roots)
+                       for candidate in candidates if (root / candidate).is_file()), None)
+        if source is None:
+            continue
+        icon = SUBJECT_ICON_NAMES.get(name, 'subject-' + name.removeprefix('GFX_icon_').lower().replace('_', '-'))
+        save_sprite(load_rgba(source), panel_dir / f'{icon}.webp')
+        icons[name] = icon
+    fallback = tuple(icons[name] for name in default_sprites)
+    return {subtype: tuple(icons.get(sprite, default_icon) for sprite, default_icon in zip(pair, fallback))
+            for subtype, pair in pairs.items()}
 
 
 def ruler_details(history, translation):
@@ -581,7 +636,7 @@ def religion_frames(roots):
     return frames
 
 
-def add_dossiers(countries, roots, histories, values, locales, relations, english):
+def add_dossiers(countries, roots, histories, values, locales, relations, subject_icons, english):
     strings, english_strings = locales
     countries_by_tag = {country['tag']: country for country in countries}
     recommendations = recommended_tags(roots[-1])
@@ -618,7 +673,7 @@ def add_dossiers(countries, roots, histories, values, locales, relations, englis
             if not labels:
                 zh, en = SUBJECT_LABELS[kind]
                 labels = strings.get(subtype, zh), english_strings.get(subtype, en)
-            icon, reverse = SUBJECT_ICONS.get(subtype, ('subject', 'overlord'))
+            icon, reverse = subject_icons[subtype]
             connect(first, second, icon, labels)
             connect(second, first, reverse, ('宗主国', 'Overlord'), labels)
             statuses[second] = dict(tag=first, label=labels[0], en=labels[1])
@@ -903,10 +958,14 @@ def main():
         countries.append(country)
 
     width, height, land, neutral_provinces, countries = build_map(vanilla, output, countries, owner_for_province)
-    add_dossiers(countries, roots, histories, country_values, (strings, english_strings), relations, english)
+    build_panel_assets(vanilla, mod, output)
+    map_tags = {country['tag'] for country in countries}
+    subtypes = {subtype for kind, first, second, subtype in relations
+                if kind in {'vassal', 'union', 'march', 'dependency'} and first in map_tags and second in map_tags}
+    subject_icons = build_subject_icons(roots, subtypes, output / 'panel')
+    add_dossiers(countries, roots, histories, country_values, (strings, english_strings), relations, subject_icons, english)
     government_names.apply(countries, strings, english_strings)
     government_names.add_backgrounds(countries, mod, english)
-    build_panel_assets(vanilla, mod, output)
     build_shields(vanilla, mod, output, countries)
 
     data = dict(width=width, height=height, land=land, neutralProvinces=neutral_provinces, countries=countries)
