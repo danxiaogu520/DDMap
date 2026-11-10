@@ -1,0 +1,8 @@
+/开局政府等级待核对.md
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+*.docx
+*.log
