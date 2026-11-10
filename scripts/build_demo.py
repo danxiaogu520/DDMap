@@ -502,12 +502,16 @@ def ruler_details(history, translation):
     name, english_name = clean(monarch, 'name'), clean(translated, 'name')
     if not name and not english_name and not regency:
         return None
-    gender = None if regency else ('female' if monarch.get('female') == 'yes' else 'male')
     birth = parse_date(monarch.get('birth_date'))
+    dynasty = clean(monarch, 'dynasty')
+    female = monarch.get('female')
+    # Councils use regent = yes without a person's sex, birth date, or dynasty.
+    collective_regency = monarch.get('regent') == 'yes' and female is None and birth is None and not dynasty
+    gender = None if regency or collective_regency else ('female' if female == 'yes' else 'male')
     age = START[0] - birth[0] - (START[1:] < birth[1:]) if birth and birth <= START else None
     stats = {key: int(monarch[key]) for key in ('adm', 'dip', 'mil') if monarch.get(key, '').isdigit()}
     return dict(name=name or ('摄政会议' if regency else english_name),
-                dynasty=clean(monarch, 'dynasty'),
+                dynasty=dynasty,
                 en=dict(name=english_name or ('Regency Council' if regency else name),
                         dynasty=clean(translated, 'dynasty').removeprefix('¿')),
                 age=age, gender=gender, stats=stats)

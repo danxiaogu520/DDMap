@@ -416,7 +416,7 @@ function renderRuler(ruler) {
   const words = copy[language];
   const gender = byId('ruler-gender');
   gender.hidden = !ruler.gender;
-  if (ruler.gender) gender.src = 'data/panel/' + ruler.gender + '.webp';
+  if (ruler.gender) gender.src = 'data/panel/' + ruler.gender + '.webp?v=ruler-gender';
   const fullName = localized(ruler, 'fullName') ||
     [localized(ruler, 'name'), localized(ruler, 'dynasty')].filter(Boolean).join(' ');
   byId('ruler-name').textContent = [localized(ruler, 'title'), fullName].filter(Boolean).join(' ');

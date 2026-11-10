@@ -59,7 +59,7 @@ def build_panel_assets(vanilla, mod, output):
     for name, file in ICONS.items():
         save_sprite(load_rgba(interface / file), panel_dir / f'{name}.webp')
     gender = load_rgba(interface / 'gender_icon.dds')
-    for index, name in enumerate(('male', 'female')):
+    for index, name in enumerate(('female', 'male')):
         save_sprite(gender.crop((16 * index, 0, 16 * (index + 1), 16)), panel_dir / f'{name}.webp')
     religion_strip = load_rgba(mod / 'gfx/interface/icon_religion_small.dds')
     religion_dir = panel_dir / 'religions'
