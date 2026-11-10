@@ -259,16 +259,28 @@ def province_snapshot(roots):
     return {province: snapshot(path, fields) for province, path in files.items()}
 
 
+def listed_provinces(block):
+    # Province IDs are bare tokens. Nested color blocks contain RGB numbers.
+    depth = 0
+    for index, token in enumerate(block):
+        if token == '{':
+            depth += 1
+        elif token == '}':
+            depth -= 1
+        elif depth == 0 and token.isdigit() and (index == 0 or block[index - 1] != '='):
+            yield token
+
+
 def capital_geography(roots):
     files = {path.name: path for path in layered_files(roots, 'map')}
     areas = {province: area for area, block in entries(files['area.txt'])
-             if isinstance(block, list) for province in block if province.isdigit()}
+             if isinstance(block, list) for province in listed_provinces(block)}
     regions = {area: region for region, block in entries(files['region.txt'])
                if isinstance(block, list) for area in dict(assignments(block)).get('areas', [])}
     superregions = {region: superregion for superregion, block in entries(files['superregion.txt'])
                     if isinstance(block, list) for region in block}
     continents = {province: continent for continent, block in entries(files['continent.txt'])
-                  if isinstance(block, list) for province in block if province.isdigit()}
+                  if isinstance(block, list) for province in listed_provinces(block)}
     return areas, regions, superregions, continents
 
 
